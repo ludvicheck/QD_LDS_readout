@@ -5,6 +5,7 @@ import pandas as pd
 from math import sqrt
 import random
 
+
 def multiple_SimCom(Y,T,level):
 # Define a function for solving the NCPO problems with 
 # given standard deviations of process noise and observtion noise,
@@ -47,6 +48,25 @@ def multiple_SimCom(Y,T,level):
     nrmse_sim = 1-sqrt(sdp[sum(np.inner(Y[0,j]-f[j] + q[j], Y[0,j]-f[j] + q[j]) for j in range(T)) ])/sqrt(sum(np.inner(Y[0,j]- Y[0].mean(axis=(0)), Y[0,j]- Y[0].mean(axis=(0))) for j in range(T)))
 
     #nrmse_sim = 1-sqrt(sdp[sum((Y[0,i]-f[i]+ q[i])**2 for i in range(T))])/sqrt(sum((Y[0,i]-np.mean(Y[0]))**2 for i in range(T)))
+
+    print("G ", sdp[G])
+    print("fdash ", sdp[Fdash])
+    
+    for i in range(T):
+       print("q",i, " ", sdp[q[i]])
+    
+    for i in range(T):
+       print("p",i, " ", sdp[p[i]])
+
+    for i in range(T):
+       print("f",i, " ", sdp[f[i]])
+    
+    for i in range(T + 1):
+       print("m",i, " ", sdp[m[i]])
+
+    for i in range(1,T + 1):
+       print("fdas*m ",i, " ", sdp[Fdash*m[i+1]])
+       
 
     if(sdp.status != 'infeasible'):
         return nrmse_sim, sdp
@@ -180,10 +200,27 @@ def SimCom_elementwise(Y,T,level):
     p = generate_variables("p", n_vars=T, commutative=True)
     f = generate_variables("f", n_vars=T, commutative=True)
 
-    print("Y: ", Y, "f: ", f, "p: ", p, "q: ", q)
-
     # Objective
-    obj = sum(sum(np.inner(Y[i,j]-f[j], Y[i,j]-f[j]) for j in range(T)) for i in range(Y.shape[0])) + 0.0005*sum(p[i]**2 for i in range(T)) + 0.0001*sum(q[i]**2 for i in range(2*T))
+    obj = sum(sum((Y[i,j]-f[j])**2 for j in range(T)) for i in range(Y.shape[0])) + 0.0005*sum(p[i]**2 for i in range(T)) + 0.0001*sum(q[i]**2 for i in range(2*T))
+
+    eqs1 = [f[i] - Fdash[0]*m[2*i+2] - Fdash[1]*m[2*i+3] - p[i] for i in range(T)]
+    eqs2 = [m[i+2] - G[0]*m[i] - G[1]*m[i+1] - q[i] for i in range(0, 2*T-1, 2)]
+    eqs3 = [m[i+2] - G[2]*m[i-1] - G[3]*m[i] - q[i] for i in range(1, 2*T, 2)]
+    eqs = eqs1 + eqs2 + eqs3
+
+    """
+    subs = {}
+    for i in range(T):
+       subs[f[i]] = Fdash[0]*m[2*i+2] + Fdash[1]*m[2*i+3] + p[i]
+
+    for i in range(0, 2*T-1, 2):
+       subs[m[i+2]] = G[0]*m[i] + G[1]*m[i+1] + q[i]
+
+    for i in range(1, 2*T, 2):
+       subs[m[i+2]] = G[2]*m[i-1] + G[3]*m[i] + q[i]
+
+    print(subs)   
+    
     # Constraints
     ine1 = [f[i] - Fdash[0]*m[2*i+2] - Fdash[1]*m[2*i+3] - p[i] for i in range(T)]
     ine2 = [-f[i] + Fdash[0]*m[2*i+2] + Fdash[1]*m[2*i+3] + p[i] for i in range(T)]
@@ -193,10 +230,11 @@ def SimCom_elementwise(Y,T,level):
     ine6 = [-m[i+2] + G[2]*m[i-1] + G[3]*m[i] + q[i] for i in range(1, 2*T, 2)]
     #ine5 = [(Y[i]-f[i])**2 for i in range(T)]
     ines = ine1+ine2+ine3+ine4+ine5+ine6
+    """
 
     # Solve the NCPO
     sdp = SdpRelaxation(variables = flatten([G,Fdash,f,p,m,q]),verbose = 1)
-    sdp.get_relaxation(level, objective=obj, inequalities=ines)
+    sdp.get_relaxation(level, objective=obj, equalities=eqs) # removeequalities=True doesn't work 
     sdp.solve(solver='mosek')
     #print("sdp: ", sdp)
     #sdp.solve(solver='sdpa', solverparameters={"executable":"sdpa_gmp","executable": "C:/Users/zhouq/Documents/sdpa7-windows/sdpa.exe"})
@@ -205,16 +243,313 @@ def SimCom_elementwise(Y,T,level):
         print("sum((Y[i]-f[i])**2 for i in range(T)) < 0")
         return 
     
-    #print("G:", sdp[G], " m: ", sdp[m[0]])
 
     nrmse_sim = 1-sqrt(sdp[sum(np.inner(Y[0,j]-f[j] + q[j], Y[0,j]-f[j] + q[j]) for j in range(T)) ])/sqrt(sum(np.inner(Y[0,j]- Y[0].mean(axis=(0)), Y[0,j]- Y[0].mean(axis=(0))) for j in range(T)))
     #nrmse_sim = 1-sqrt(sdp[sum((Y[i]-f[i])**2 for i in range(T))])/sqrt(sum((Y[i]-np.mean(Y))**2 for i in range(T)))
 
-    print("G: ", sdp[G[0]], sdp[G[1]], sdp[G[2]], sdp[G[3]])
+    G_mat = np.array([[sdp[G[0]], sdp[G[1]]], [sdp[G[2]], sdp[G[3]]]])
+    Fdash_mat = np.array([[sdp[Fdash[0]], sdp[Fdash[1]]]])
+
+    with np.printoptions(threshold=np.inf):
+        print("x_mat: ", sdp.x_mat[0][0])
+
+    with open("monoms.txt","w") as file:
+       for i in range(4):
+          file.write("G%d %s\n"%(i, str(sdp[G[i]])))
+       for i in range(2):
+          file.write("Fdash%d %s\n"%(i, str(sdp[Fdash[i]])))
+       for i in range(2*T):
+           file.write("q%d %s\n"%(i, str(sdp[q[i]])))
+       for i in range(T):
+           file.write("p%d %s\n"%(i, str(sdp[p[i]])))
+       for i in range(2*T + 2):
+           file.write("m%d %s\n"%(i, str(sdp[m[i]])))
+       for i in range(T):
+           file.write("f%d %s\n"%(i, str(sdp[f[i]])))
+       for i in range(T):
+           file.write("Fdash*m sum %d %s\n"%(i, str(sdp[Fdash[0]*m[2*i+2]] + sdp[Fdash[1]*m[2*i+3]])))
+        
+
+    for i in range(2*T):
+       print("q",i, " ", sdp[q[i]])
+    
+    for i in range(T):
+       print("p",i, " ", sdp[p[i]])
+
+    for i in range(T):
+       print("f",i, " ", sdp[f[i]])
+    
+    for i in range(2*T + 2):
+       print("m",i, " ", sdp[m[i]])
+
+    for i in range(T):
+       print("fdas*m ",i, " ", sdp[Fdash[0]*m[2*i+2] + Fdash[1]*m[2*i+3]])
+
+    sdp.write_to_file("sdp_file.csv")
+    sdp.save_monomial_index("monomials.txt")
 
     if(sdp.status != 'infeasible'):
         print(nrmse_sim)
-        return nrmse_sim, sdp
+        return nrmse_sim, G_mat, Fdash_mat
+    else:
+        print('Cannot find feasible solution.')
+        return
+    
+def SimCom_elementwise_rand(Y,T,level, pro, obs):
+# Define a function for solving the NCPO problems with 
+# given standard deviations of process noise and observtion noise,
+# length of  estimation data and required relaxation level. 
+
+#here I put out the noise realizations as variables since the algorithm tends to make matrices zero and always makes the noise exactly equal to datapoint of the trajectory
+
+
+    # Decision Variables
+    G = generate_variables("G", n_vars=4, commutative=True)
+    Fdash = generate_variables("Fdash", n_vars=2, commutative=True)
+    m = generate_variables("m", n_vars=2*(T+1), commutative=True)
+    f = generate_variables("f", n_vars=T, commutative=True)
+
+    # Objective
+    obj = sum(sum((Y[i,j]-f[j])**2 for j in range(T)) for i in range(Y.shape[0])) #+ 0.0005*sum(p[i]**2 for i in range(T)) + 0.0001*sum(q[i]**2 for i in range(2*T))
+
+    
+    eqs1 = [f[i] - Fdash[0]*m[2*i+2] - Fdash[1]*m[2*i+3] - np.random.normal(0, scale = obs) for i in range(T)]
+    eqs2 = [m[i+2] - G[0]*m[i] - G[1]*m[i+1] - np.random.normal(0, scale = pro) for i in range(0, 2*T-1, 2)]
+    eqs3 = [m[i+2] - G[2]*m[i-1] - G[3]*m[i] - np.random.normal(0, scale = pro) for i in range(1, 2*T, 2)]
+    eqs = eqs1 + eqs2 + eqs3
+    print("eqs: ", eqs)
+
+    """
+    subs = {}
+    for i in range(T):
+       subs[f[i]] = Fdash[0]*m[2*i+2] + Fdash[1]*m[2*i+3] + p[i]
+
+    for i in range(0, 2*T-1, 2):
+       subs[m[i+2]] = G[0]*m[i] + G[1]*m[i+1] + q[i]
+
+    for i in range(1, 2*T, 2):
+       subs[m[i+2]] = G[2]*m[i-1] + G[3]*m[i] + q[i]
+
+    print(subs)   
+    
+    # Constraints - nutno zaridit, aby u rovnosti byl stejnej seed
+    ine1 = [f[i] - Fdash[0]*m[2*i+2] - Fdash[1]*m[2*i+3] - np.random.normal(0, scale = 0.1) for i in range(T)]
+    ine2 = [-f[i] + Fdash[0]*m[2*i+2] + Fdash[1]*m[2*i+3] + np.random.normal(0, scale = 0.1) for i in range(T)]
+    ine3 = [m[i+2] - G[0]*m[i] - G[1]*m[i+1] - np.random.normal(0, scale = 0.2) for i in range(0, 2*T-1, 2)]
+    ine4 = [m[i+2] - G[2]*m[i-1] - G[3]*m[i] - np.random.normal(0, scale = 0.2) for i in range(1, 2*T, 2)]
+    ine5 = [-m[i+2] + G[0]*m[i] + G[1]*m[i+1] + np.random.normal(0, scale = 0.2) for i in range(0, 2*T-1, 2)]
+    ine6 = [-m[i+2] + G[2]*m[i-1] + G[3]*m[i] + np.random.normal(0, scale = 0.2) for i in range(1, 2*T, 2)]
+    #ine5 = [(Y[i]-f[i])**2 for i in range(T)]
+    ines = ine1+ine2+ine3+ine4+ine5+ine6
+    """
+
+    # Solve the NCPO
+    sdp = SdpRelaxation(variables = flatten([G,Fdash,f,m]),verbose = 1)
+    sdp.get_relaxation(level, objective=obj, equalities=eqs) # removeequalities=True doesn't work 
+    sdp.solve(solver='mosek')
+    #print("sdp: ", sdp)
+    #sdp.solve(solver='sdpa', solverparameters={"executable":"sdpa_gmp","executable": "C:/Users/zhouq/Documents/sdpa7-windows/sdpa.exe"})
+    #print(sdp.primal, sdp.dual, sdp.status)
+    print(sdp.x_mat[0].shape)
+    if (sdp[sum(sum(np.inner(Y[i,j]-f[j], Y[i,j]-f[j]) for j in range(T)) for i in range(Y.shape[0])) ] < 0):
+        print("sum((Y[i]-f[i])**2 for i in range(T)) < 0")
+        return 
+    
+
+    nrmse_sim = 1-sqrt(sdp[sum(np.inner(Y[0,j]-f[j], Y[0,j]-f[j]) for j in range(T)) ])/sqrt(sum(np.inner(Y[0,j]- Y[0].mean(axis=(0)), Y[0,j]- Y[0].mean(axis=(0))) for j in range(T)))
+    #nrmse_sim = 1-sqrt(sdp[sum((Y[i]-f[i])**2 for i in range(T))])/sqrt(sum((Y[i]-np.mean(Y))**2 for i in range(T)))
+
+    G_mat = np.array([[sdp[G[0]], sdp[G[1]]], [sdp[G[2]], sdp[G[3]]]])
+    Fdash_mat = np.array([[sdp[Fdash[0]], sdp[Fdash[1]]]])
+
+    with np.printoptions(threshold=np.inf):
+        print("x_mat: ", sdp.x_mat[0][0])
+
+    for i in range(T):
+       print("f",i, " ", sdp[f[i]])
+
+    for i in range(2*T + 2):
+       print("m",i, " ", sdp[m[i]])
+    
+    print("process eq: ", sdp[m[3] - G[2]*m[0] - G[3]*m[1]])
+    print("measurement eq", sdp[f[0] - Fdash[0]*m[2] - Fdash[1]*m[3]])
+    print("different values: ", sdp[Fdash[0]]*sdp[m[2]] + sdp[Fdash[1]]*sdp[m[3]], sdp[Fdash[0]*m[2] + Fdash[1]*m[3]])
+    print("a ještě: ", Y[0,0]-sdp[f[0]])
+
+    if(sdp.status != 'infeasible'):
+        print(nrmse_sim)
+        return nrmse_sim, G_mat, Fdash_mat
+    else:
+        print('Cannot find feasible solution.')
+        return
+
+
+def SimCom_elementwise_rand_uncons(Y,T,level, pro, obs):
+# Define a function for solving the NCPO problems with 
+# given standard deviations of process noise and observtion noise,
+# length of  estimation data and required relaxation level. 
+
+    # Decision Variables
+    G = generate_variables("G", n_vars=4, commutative=True)
+    Fdash = generate_variables("Fdash", n_vars=2, commutative=True)
+    #m = generate_variables("m", n_vars=2*(T+1), commutative=True)
+    #f = generate_variables("f", n_vars=T, commutative=True)
+
+    states, observations = unconst_recursion(G, Fdash, T, pro, obs)
+    print("states: ", states)
+    print("observations: ", observations)
+
+    # Objective
+    obj = sum(sum((Y[i,j]-observations[j])**2 for j in range(T)) for i in range(Y.shape[0])) #+ 0.0005*sum(p[i]**2 for i in range(T)) + 0.0001*sum(q[i]**2 for i in range(2*T))
+
+    """
+    eqs1 = [f[i] - Fdash[0]*m[2*i+2] - Fdash[1]*m[2*i+3] - np.random.normal(0, scale = obs) for i in range(T)]
+    eqs2 = [m[i+2] - G[0]*m[i] - G[1]*m[i+1] - np.random.normal(0, scale = pro) for i in range(0, 2*T-1, 2)]
+    eqs3 = [m[i+2] - G[2]*m[i-1] - G[3]*m[i] - np.random.normal(0, scale = pro) for i in range(1, 2*T, 2)]
+    eqs = eqs1 + eqs2 + eqs3
+    print("eqs: ", eqs)
+
+    
+    subs = {}
+    for i in range(T):
+       subs[f[i]] = Fdash[0]*m[2*i+2] + Fdash[1]*m[2*i+3] + p[i]
+
+    for i in range(0, 2*T-1, 2):
+       subs[m[i+2]] = G[0]*m[i] + G[1]*m[i+1] + q[i]
+
+    for i in range(1, 2*T, 2):
+       subs[m[i+2]] = G[2]*m[i-1] + G[3]*m[i] + q[i]
+
+    print(subs)   
+    
+    # Constraints - nutno zaridit, aby u rovnosti byl stejnej seed
+    ine1 = [f[i] - Fdash[0]*m[2*i+2] - Fdash[1]*m[2*i+3] - np.random.normal(0, scale = 0.1) for i in range(T)]
+    ine2 = [-f[i] + Fdash[0]*m[2*i+2] + Fdash[1]*m[2*i+3] + np.random.normal(0, scale = 0.1) for i in range(T)]
+    ine3 = [m[i+2] - G[0]*m[i] - G[1]*m[i+1] - np.random.normal(0, scale = 0.2) for i in range(0, 2*T-1, 2)]
+    ine4 = [m[i+2] - G[2]*m[i-1] - G[3]*m[i] - np.random.normal(0, scale = 0.2) for i in range(1, 2*T, 2)]
+    ine5 = [-m[i+2] + G[0]*m[i] + G[1]*m[i+1] + np.random.normal(0, scale = 0.2) for i in range(0, 2*T-1, 2)]
+    ine6 = [-m[i+2] + G[2]*m[i-1] + G[3]*m[i] + np.random.normal(0, scale = 0.2) for i in range(1, 2*T, 2)]
+    #ine5 = [(Y[i]-f[i])**2 for i in range(T)]
+    ines = ine1+ine2+ine3+ine4+ine5+ine6
+    """
+
+    # Solve the NCPO
+    sdp = SdpRelaxation(variables = flatten([G,Fdash]),verbose = 1)
+    sdp.get_relaxation(level, objective=obj)
+    sdp.solve(solver='mosek')
+
+    #sdp.solve(solver='sdpa', solverparameters={"executable":"sdpa_gmp","executable": "C:/Users/zhouq/Documents/sdpa7-windows/sdpa.exe"})
+    if (sdp[sum(sum(np.inner(Y[i,j]-observations[j], Y[i,j]-observations[j]) for j in range(T)) for i in range(Y.shape[0])) ] < 0):
+        print("sum((Y[i]-f[i])**2 for i in range(T)) < 0")
+        return 
+    
+
+    nrmse_sim = 1-sqrt(sdp[sum(np.inner(Y[0,j]-observations[j], Y[0,j]-observations[j]) for j in range(T)) ])/sqrt(sum(np.inner(Y[0,j]- Y[0].mean(axis=(0)), Y[0,j]- Y[0].mean(axis=(0))) for j in range(T)))
+    #nrmse_sim = 1-sqrt(sdp[sum((Y[i]-f[i])**2 for i in range(T))])/sqrt(sum((Y[i]-np.mean(Y))**2 for i in range(T)))
+
+    G_mat = np.array([[sdp[G[0]], sdp[G[1]]], [sdp[G[2]], sdp[G[3]]]])
+    Fdash_mat = np.array([[sdp[Fdash[0]], sdp[Fdash[1]]]])
+
+    with np.printoptions(threshold=np.inf):
+        print("x_mat: ", sdp.x_mat[0][0])
+
+    if(sdp.status != 'infeasible'):
+        print(nrmse_sim)
+        return nrmse_sim, G_mat, Fdash_mat
+    else:
+        print('Cannot find feasible solution.')
+        return
+    
+def unconst_recursion(G, Fdash, runs, pro, obs):
+   
+   if runs == 0:
+      states = []
+      observations = []
+      state = [0, 0]
+      state[0] = 1 + np.random.normal(0, scale = pro)
+      state[1] = 1 + np.random.normal(0, scale = pro)
+      observation = Fdash[0]*state[0] + Fdash[1]*state[1] + np.random.normal(0, scale = obs)
+      states.append(state)
+      observations.append(observation)
+      return states, observations
+   else:
+      states, observations = unconst_recursion(G, Fdash, runs-1, pro, obs)
+      old_state = states[-1]
+      state = [0,0]
+      state[0] = G[0]*old_state[0] + G[1]*old_state[1] + np.random.normal(0, scale = pro)
+      state[1] = G[2]*old_state[0] + G[3]*old_state[1] + np.random.normal(0, scale = pro)
+      observation = Fdash[0]*state[0] + Fdash[1]*state[1] + np.random.normal(0, scale = obs)
+      states.append(state)
+      observations.append(observation)
+      return states, observations
+   
+def SimCom_elementwise_nonoise(Y,T,level):
+# Define a function for solving the NCPO problems with 
+# given standard deviations of process noise and observtion noise,
+# length of  estimation data and required relaxation level. 
+
+    # Decision Variables
+    G = generate_variables("G", n_vars=4, commutative=True)
+    Fdash = generate_variables("Fdash", n_vars=2, commutative=True)
+    m = generate_variables("m", n_vars=2*(T+1), commutative=True)
+    f = generate_variables("f", n_vars=T, commutative=True)
+
+    # Objective
+    obj = sum(sum((Y[i,j]-f[j])**2 for j in range(T)) for i in range(Y.shape[0]))
+
+    eqs1 = [f[i] - Fdash[0]*m[2*i+2] - Fdash[1]*m[2*i+3] for i in range(T)]
+    eqs2 = [m[i+2] - G[0]*m[i] - G[1]*m[i+1] for i in range(0, 2*T-1, 2)]
+    eqs3 = [m[i+2] - G[2]*m[i-1] - G[3]*m[i] for i in range(1, 2*T, 2)]
+    eqs = eqs1 + eqs2 + eqs3
+
+    # Solve the NCPO
+    sdp = SdpRelaxation(variables = flatten([G,Fdash,f,m]),verbose = 1)
+    sdp.get_relaxation(level, objective=obj, equalities=eqs) # removeequalities=True doesn't work 
+    sdp.solve(solver='mosek')
+    #print("sdp: ", sdp)
+    #sdp.solve(solver='sdpa', solverparameters={"executable":"sdpa_gmp","executable": "C:/Users/zhouq/Documents/sdpa7-windows/sdpa.exe"})
+    #print(sdp.primal, sdp.dual, sdp.status)
+    if (sdp[sum(sum(np.inner(Y[i,j]-f[j], Y[i,j]-f[j]) for j in range(T)) for i in range(Y.shape[0])) ] < 0):
+        print("sum((Y[i]-f[i])**2 for i in range(T)) < 0")
+        return 
+    
+
+    nrmse_sim = 1-sqrt(sdp[sum(np.inner(Y[0,j]-f[j], Y[0,j]-f[j]) for j in range(T)) ])/sqrt(sum(np.inner(Y[0,j]- Y[0].mean(axis=(0)), Y[0,j]- Y[0].mean(axis=(0))) for j in range(T)))
+    #nrmse_sim = 1-sqrt(sdp[sum((Y[i]-f[i])**2 for i in range(T))])/sqrt(sum((Y[i]-np.mean(Y))**2 for i in range(T)))
+
+    G_mat = np.array([[sdp[G[0]], sdp[G[1]]], [sdp[G[2]], sdp[G[3]]]])
+    Fdash_mat = np.array([[sdp[Fdash[0]], sdp[Fdash[1]]]])
+
+    with np.printoptions(threshold=np.inf):
+        print("x_mat: ", sdp.x_mat[0][0])
+
+    with open("monoms.txt","w") as file:
+       for i in range(4):
+          file.write("G%d %s\n"%(i, str(sdp[G[i]])))
+       for i in range(2):
+          file.write("Fdash%d %s\n"%(i, str(sdp[Fdash[i]])))
+       for i in range(2*T + 2):
+           file.write("m%d %s\n"%(i, str(sdp[m[i]])))
+       for i in range(T):
+           file.write("f%d %s\n"%(i, str(sdp[f[i]])))
+       for i in range(T):
+           file.write("Fdash*m sum %d %s\n"%(i, str(sdp[Fdash[0]*m[2*i+2]] + sdp[Fdash[1]*m[2*i+3]])))
+
+    for i in range(T):
+       print("f",i, " ", sdp[f[i]])
+    
+    for i in range(2*T + 2):
+       print("m",i, " ", sdp[m[i]])
+
+    for i in range(T):
+       print("fdas*m ",i, " ", sdp[Fdash[0]*m[2*i+2] + Fdash[1]*m[2*i+3]])
+
+    sdp.write_to_file("sdp_file.csv")
+    sdp.save_monomial_index("monomials.txt")
+
+    if(sdp.status != 'infeasible'):
+        print(nrmse_sim)
+        return nrmse_sim, G_mat, Fdash_mat
     else:
         print('Cannot find feasible solution.')
         return

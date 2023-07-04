@@ -1,5 +1,3 @@
-import sys
-sys.path.append("\anaconda3\pkgs") 
 from inputlds import*
 from QD_LDS_functions import*
 from ncpol2sdpa import*
@@ -7,13 +5,15 @@ import numpy as np
 import pandas as pd
 from math import sqrt
 
-obs =0.2
-pro = 0.1
+np.set_printoptions(threshold=10)
+
+obs =0.002 #0.2
+pro = 0.001 #0.1
 level = 1
 measurements = 1
-T = 20
+T = 25
 
-"""
+
 
 #try with Hazan system but Kalman without learned matrices
 g = np.matrix([[0.9,0.2],[0.1,0.1]])
@@ -34,14 +34,33 @@ Y= []
 for i in range(measurements):
     Y.append(data_generation(g,f_dash,pro,obs,T))
 Y = np.array(Y)
+for i in range(T):
+    print(Y[0][i])
 
-nmrse, sdp = multiple_SimCom(Y ,T, level)
+#Ydf=pd.DataFrame(Y[0])
+#Ydf.to_csv('data/LDSdata.csv',index=False)
+'''
+nmrse, G_mat, Fdash_mat = SimCom_elementwise_nonoise(Y ,T, level)
 print("nrmse: ", nmrse)
+print("G: ", G_mat)
+print("Fdash:", Fdash_mat)
 
-preds, errors = Kalman_filter(g, f_dash.T, pro_mat, obs_mat, Y[0])
+#decomp = np.linalg.cholesky(sdp.x_mat[0])
+#Dec = pd.DataFrame(np.around(decomp, decimals=4))
+#Dec.to_csv('data/decomp.csv',index=False)
+
+#print("decomp: ", decomp)
+#print("decomp shape: ", decomp.shape)
+
+preds, errors = Kalman_filter(G_mat, Fdash_mat.T, pro_mat, obs_mat, Y[0])
 print("preds: ", preds )
 print("errors: ", errors)
 
+with open("results.txt","w") as file:
+    file.write("nrmse %s\n" % str(nmrse))
+    file.write("preds %s\n" % str(preds))
+    file.write("errors %s\n" % str(errors))
+'''
 
 
 
@@ -66,3 +85,4 @@ print("errors: ", errors2D)
 
 #It is possible also to try SimCom_elementwise function (instead of multiple_SimCom), which approaches the NCPOP problem with variables as matrix elements.
 #This is probably bad approach, but for Hazan system it still provides good results
+"""
