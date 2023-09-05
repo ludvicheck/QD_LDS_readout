@@ -162,14 +162,14 @@ def generate_C1_data(num_trajectories, T):
    return trajectories
 
 def labelled_decission(C0_losses, C1_losses):
-   C0_loss = sum(C0_losses)
-   C1_loss = sum(C1_losses)
+   C0_loss = sum(C0_losses[2:])
+   C1_loss = sum(C1_losses[2:])
    if C0_loss > C1_loss:
       decission = 1
-      print("measurement result: 1")
+      #print("measurement result: 1")
    else:
       decission = 0
-      print("measurement result: 0")
+      #print("measurement result: 0")
     
    return decission
 
