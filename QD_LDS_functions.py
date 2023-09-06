@@ -82,9 +82,9 @@ def Kalman_filter(G, F, W, V, trajectory):
 
   Id = np.eye(n)
   if F.shape[1] == 1:
-     m_prev = 0 #np.matrix([[0],[0]])
+     m_prev = 1 #np.matrix([[0],[0]]), originally 0
   else:
-     m_prev = np.array([0,0])
+     m_prev = np.array([1,1]) #originally [0,0]
   
   C_prev = np.zeros((n,n))
 
