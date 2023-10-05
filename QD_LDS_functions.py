@@ -77,6 +77,8 @@ def multiple_SimCom(Y,T,level):
 
 def Kalman_filter(G, F, W, V, trajectory):
 
+  #algorithm taken from https://github.com/jmarecek/OnlineLDS/blob/master/onlinelds.py and altered to 2D data
+  
   T = trajectory.shape[0]
   n = G.shape[0]
 
@@ -119,7 +121,7 @@ def Kalman_filter(G, F, W, V, trajectory):
 
 def generate_C0_data(num_trajectories, T):
    mean_C0 = (0.1, 0.2)
-   cov_C0 = [[1, 0], [0, 1]]
+   cov_C0 = [[0.001, 0], [0, 0.001]] #initial: [[1, 0], [0, 1]]
 
    trajectories = []
 
@@ -132,9 +134,9 @@ def generate_C0_data(num_trajectories, T):
 def generate_C1_data(num_trajectories, T):
    T_1 = 100000 #ns
    mean_C1 = (0.8, 0.1)
-   cov_C1 = [[0.6, 0], [0, 0.6]]
+   cov_C1 = [[0.006, 0], [0, 0.006]] #initial: [[0.6, 0], [, 0.6]]
    mean_C0 = (0.1, 0.2)
-   cov_C0 = [[1, 0], [0, 1]]
+   cov_C0 = [[0.001, 0], [0, 0.001]] #initial: [[1, 0], [0, 1]]
 
    classes = [0,1]
    trajectories = []
